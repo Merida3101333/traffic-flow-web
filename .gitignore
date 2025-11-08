@@ -1,0 +1,32 @@
+# OS / 編輯器暫存
+.DS_Store
+Thumbs.db
+*.log
+.idea/
+.vscode/
+__pycache__/
+*.pyc
+
+# Python/環境
+.venv/
+venv/
+.env
+.env.* 
+
+# R 相關
+.RData
+.Rhistory
+*.Rproj.user
+
+# 不必要或大型檔案
+*.zip
+*.7z
+*.tar
+*.tar.gz
+
+# 專案資料：避免把原始/巨大資料推上去（只保留部署需要的 processed/mapping）
+data/raw/
+output/
+
+# Streamlit 機密（改放雲端 Secrets 介面）
+.streamlit/secrets.toml
