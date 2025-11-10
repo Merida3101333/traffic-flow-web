@@ -39,6 +39,7 @@ DATA = ROOT / "data" / "processed"
 st.set_page_config(page_title="Midtown Taxi Flow", layout="wide")
 st.title("曼哈頓中城區計程車車流量預測模型比較")
 
+'''
 # === Debug/Diagnostics 面板（本機與雲端環境快速比對） ===
 with st.sidebar.expander("🔧 Diagnostics（環境自檢）", expanded=False):
     import sys, importlib, os
@@ -70,7 +71,7 @@ with st.sidebar.expander("🔧 Diagnostics（環境自檢）", expanded=False):
         st.write("**ZONE_CENTERS empty?**", (len(ZONE_CENTERS) == 0))
     except Exception:
         st.write("**ZONE_CENTERS**", "not yet computed here")
-
+'''
 
 # ---------- 載入 GeoJSON ----------
 with open(GEO, "r", encoding="utf-8") as f:
@@ -696,4 +697,5 @@ with tab3:
         model_title = view_mode.split(":")[1].strip() if ":" in view_mode else view_mode
         st.markdown(f"**{title_map[mode_kind]} — {model_title}**  ·  Day **{day_m}** · Period **{period_m}** · Unit **{stat_m}**")
         st.plotly_chart(fig, use_container_width=True)
+
 
