@@ -1,4 +1,4 @@
-# app/app.py — 整合與增強版（修正版）
+# app/app.py — 整合與增強版
 # =========================================
 # Tabs:
 #   1) 21-day Compare (OBS vs ARIMA vs TensorTS vs LSTM) — period level
@@ -39,37 +39,9 @@ DATA = ROOT / "data" / "processed"
 st.set_page_config(page_title="Midtown Taxi Flow", layout="wide")
 st.title("曼哈頓中城區計程車車流量預測模型比較")
 
-# ---------- 嚴格 CSV 讀取（指定 dtype，避免雲端推斷錯誤） ----------
-DTYPE_LONG_BASE = {
-    "origin_zone_id": "int64",
-    "dest_zone_id":   "int64",
-    "day_abs":        "int64",
-}
-
-def _read_csv_strict(path: Path, extra_dtypes: dict | None = None) -> pd.DataFrame:
-    dtypes = DTYPE_LONG_BASE.copy()
-    if extra_dtypes:
-        dtypes.update(extra_dtypes)
-    # 有些檔案沒有所有欄位也可讀，dtype 不存在時 pandas 會忽略
-    return pd.read_csv(path, dtype=dtypes)
-
 # ---------- 載入 GeoJSON ----------
 with open(GEO, "r", encoding="utf-8") as f:
     gj = json.load(f)
-
-# ---------- 兼容的 zone_id 解析 ----------
-def _get_zone_id(props: dict):
-    """取出 zone_id（支援 zone_id/location_id/LocationID），並轉成 int；失敗回傳 None。"""
-    for k in ("zone_id", "location_id", "LocationID"):
-        if k in props and props[k] is not None:
-            try:
-                return int(props[k])
-            except Exception:
-                try:
-                    return int(float(props[k]))  # "186.0" 之類
-                except Exception:
-                    return None
-    return None
 
 # ---------- 幾何輔助：中心、邊界、標籤座標 ----------
 def guess_center(geojson):
@@ -101,16 +73,15 @@ def compute_centroids(geojson):
     centers = {}
     try:
         from shapely.geometry import shape
-        for ft in geojson.get("features", []):
+        for ft in geojson["features"]:
             props = ft.get("properties", {})
-            zid = _get_zone_id(props)
+            zid = props.get("zone_id")
             if zid is None:
                 continue
             geom = shape(ft["geometry"])
             p = geom.representative_point()
             centers[zid] = (float(p.y), float(p.x))
     except Exception:
-        # 若沒 shapely，就不顯示中心點（標籤）
         pass
     return centers
 
@@ -141,11 +112,6 @@ def make_map_with_values(title, gj, values, vmin=None, vmax=None,
 
     # 色階範圍
     if values is not None and len(values) > 0:
-        # 確保索引鍵是 int
-        try:
-            values.index = values.index.astype(int)
-        except Exception:
-            pass
         vmin = float(values.min()) if vmin is None else float(vmin)
         vmax = float(values.max()) if vmax is None else float(vmax)
         if vmax == vmin: vmax = vmin + 1.0
@@ -159,10 +125,9 @@ def make_map_with_values(title, gj, values, vmin=None, vmax=None,
                                                 aliases=["Zone", "ID"], sticky=True)
 
     def style_fn(feat):
-        props = feat.get("properties", {})
-        zid = _get_zone_id(props)
+        zid = feat["properties"].get("zone_id")
         fill = "#cccccc"
-        if (values is not None) and (zid is not None) and (zid in values.index):
+        if values is not None and zid in values.index:
             fill = cmap(values.loc[zid])
         s = base_style.copy()
         s["fillColor"] = fill
@@ -172,25 +137,24 @@ def make_map_with_values(title, gj, values, vmin=None, vmax=None,
                    highlight_function=lambda x: highlight, tooltip=tooltip).add_to(m)
 
     # 中心值標籤（四捨五入）
-    if show_labels and values is not None and len(values) > 0 and len(ZONE_CENTERS) > 0:
+    if show_labels and values is not None and len(values) > 0:
         for zid, val in values.items():
             if zid in ZONE_CENTERS:
                 lat, lng = ZONE_CENTERS[zid]
                 label = format_label_half_up(float(val), digits=label_digits)
                 html = f"""
                 <div style="
-                    pointer-events: none;
                     position: relative;
                     left: 50%; top: 50%;
                     transform: translate(-50%, -50%);
                     font-size: 12px; font-weight: 700;
-                    color: #111;
+                    color: #000;
                     white-space: nowrap;
                     text-shadow:
-                        -1px -1px 1px rgba(255,255,255,0.95),
-                         1px -1px 1px rgba(255,255,255,0.95),
-                        -1px  1px 1px rgba(255,255,255,0.95),
-                         1px  1px 1px rgba(255,255,255,0.95),
+                        -1px -1px 1px rgba(255,255,255,0.9),
+                         1px -1px 1px rgba(255,255,255,0.9),
+                        -1px  1px 1px rgba(255,255,255,0.9),
+                         1px  1px 1px rgba(255,255,255,0.9),
                          0px  0px 2px rgba(0,0,0,0.35);
                 ">{label}</div>
                 """
@@ -206,9 +170,7 @@ def make_map_with_values(title, gj, values, vmin=None, vmax=None,
 # ---------- 資料讀取 ----------
 @st.cache_data
 def load_csv(name: str) -> pd.DataFrame:
-    # obs_hourly_canonical.csv 至少有 hour_abs
-    extra = {"hour_abs": "int64"}
-    return _read_csv_strict(DATA / name, extra_dtypes=extra)
+    return pd.read_csv(DATA / name)
 
 def get_period_file(model: str, period: str) -> Path | None:
     """
@@ -258,7 +220,7 @@ def period_zone_values(model: str, day_abs: int, period: str, agg_mode: str, sta
     if path is None or not path.exists():
         return None
 
-    df = _read_csv_strict(path, extra_dtypes={"period": "string"})
+    df = pd.read_csv(path)
     val_col = next((c for c in ["y_pred", "value", "y_sum"] if c in df.columns), None)
     if val_col is None:
         return None
@@ -289,11 +251,6 @@ def period_zone_values(model: str, day_abs: int, period: str, agg_mode: str, sta
         if stat == "Mean" and hrs > 0:
             g = g / float(hrs)
 
-    # 關鍵：索引鍵一律轉 int（避免與 GeoJSON 對不上）
-    try:
-        g.index = g.index.astype(int)
-    except Exception:
-        pass
     g.index.name = "zone_id"
     return g
 
@@ -309,24 +266,21 @@ def hourly_zone_values(df_obs_hourly: pd.DataFrame, day_abs: int, hours: list[in
 
     if agg_mode == "Origin sum (flow-out)":
         g = od.groupby("origin_zone_id", dropna=False)["value"].sum()
+        g.index.name = "zone_id"
+        return g
     elif agg_mode == "Destination sum (flow-in)":
         g = od.groupby("dest_zone_id", dropna=False)["value"].sum()
+        g.index.name = "zone_id"
+        return g
     elif agg_mode == "OD sum":
         g1 = od.groupby("origin_zone_id")["value"].sum().rename("o")
         g2 = od.groupby("dest_zone_id")["value"].sum().rename("d")
         g = pd.concat([g1, g2], axis=1).fillna(0.0)
         g["total"] = g["o"] + g["d"]
         g = g["total"]
-    else:
-        return None
-
-    # 索引鍵一律轉 int
-    try:
-        g.index = g.index.astype(int)
-    except Exception:
-        pass
-    g.index.name = "zone_id"
-    return g
+        g.index.name = "zone_id"
+        return g
+    return None
 
 # ---- for Tab3：讀取「period」等級的 OD 長表，並調整單位（Sum/Mean） ----
 def load_period_od(model: str, day_abs: int, period: str, stat: str = "Sum") -> pd.DataFrame | None:
@@ -339,7 +293,7 @@ def load_period_od(model: str, day_abs: int, period: str, stat: str = "Sum") -> 
     if path is None or not path.exists():
         return None
 
-    df = _read_csv_strict(path, extra_dtypes={"period": "string"})
+    df = pd.read_csv(path)
     val_col = next((c for c in ["y_pred", "value", "y_sum"] if c in df.columns), None)
     if val_col is None:
         return None
@@ -349,7 +303,8 @@ def load_period_od(model: str, day_abs: int, period: str, stat: str = "Sum") -> 
     if df.empty:
         return None
 
-    # 先把「逐小時/逐 slot」的多列，彙總成「同日×同 period×同 OD 一列」→ 時段合計
+    # 先把「逐小時/逐 slot」的多列，彙總成「同日×同 period×同 OD 一列」
+    # （OBS/ARIMA/TensorTS 若原本就一列，這步不影響；若有 5~6 列，就會 sum 起來變成「時段合計」）
     vals = (df.groupby(["origin_zone_id", "dest_zone_id"], dropna=False)[val_col]
               .sum()
               .reset_index()
@@ -368,9 +323,6 @@ def load_period_od(model: str, day_abs: int, period: str, stat: str = "Sum") -> 
             vals["value"] = vals["value"] / float(hrs)
 
     # 補齊 6×6 所有 OD（避免 pivot 時有 NaN），並確保索引唯一
-    vals["origin_zone_id"] = vals["origin_zone_id"].astype("int64")
-    vals["dest_zone_id"]   = vals["dest_zone_id"].astype("int64")
-
     all_pairs = pd.MultiIndex.from_product([ZONE_ORDER, ZONE_ORDER],
                                            names=["origin_zone_id","dest_zone_id"])
     vals = (vals.set_index(["origin_zone_id","dest_zone_id"])
@@ -379,6 +331,7 @@ def load_period_od(model: str, day_abs: int, period: str, stat: str = "Sum") -> 
                  .reset_index())
 
     return vals
+
 
 def od_heatmap_matrix(df_od: pd.DataFrame) -> pd.DataFrame:
     """把 OD 長表轉成 6×6 矩陣（依 ZONE_ORDER 排序）"""
@@ -409,30 +362,31 @@ if use_fit:
 else:
     center = GLOBAL_CENTER
 
-# 可選：雲端快速偵錯（部署確認後可關閉）
-with st.sidebar.expander("🧪 Debug (deploy only)", expanded=False):
-    try:
-        props0 = gj["features"][0]["properties"]
-        st.write("GeoJSON properties keys:", list(props0.keys())[:12])
-    except Exception:
-        st.write("GeoJSON properties keys: N/A")
-    st.write("ZONE_CENTERS count:", len(ZONE_CENTERS))
-
 # ---------- Tabs ----------
+
 st.markdown("""
 <style>
-:root { --tab-label-size: 28px; }
-.stTabs [role="tab"] { padding-top: 8px !important; padding-bottom: 8px !important; }
-.stTabs [role="tab"] p, .stTabs [role="tab"] span, .stTabs [role="tab"] div {
-  font-size: var(--tab-label-size) !important; line-height: 1.3 !important;
+
+:root { --tab-label-size: 20px; }
+
+.stTabs [role="tab"] {
+  padding-top: 8px !important;
+  padding-bottom: 8px !important;
 }
+.stTabs [role="tab"] p,
+.stTabs [role="tab"] span,
+.stTabs [role="tab"] div {
+  font-size: var(--tab-label-size) !important;
+  line-height: 1.3 !important;
+}
+
 </style>
 """, unsafe_allow_html=True)
 
-tab1, tab2, tab3 = st.tabs([
+tab1, tab3, tab2 = st.tabs([
     "模型預測 21 天車流量與真實值比較 (OBS vs Models)",
-    "完整 252 天車流量",
-    "OD 矩陣熱圖"
+    "OD 矩陣熱圖",
+    "完整 252 天車流量"
 ])
 
 # ===== Tab 1: 21 天比較 =====
@@ -570,11 +524,6 @@ with tab2:
             g1 = df_sel.groupby("origin_zone_id")["count"].sum().rename("o")
             g2 = df_sel.groupby("dest_zone_id")["count"].sum().rename("d")
             v_single = (pd.concat([g1, g2], axis=1).fillna(0.0).sum(axis=1))
-        # 索引鍵轉 int
-        try:
-            v_single.index = v_single.index.astype(int)
-        except Exception:
-            pass
         v_single.index.name = "zone_id"
 
         title_r = f"OBS – Day {d_full}, Hour {cur_h}"
@@ -596,61 +545,39 @@ with tab2:
         st.session_state.anim_hour = nxt
         st.rerun()
 
+
+
+
+
 # ===== Tab 3: OD Matrix Heatmap（OBS / Models / Errors） =====
 with tab3:
     st.subheader("OD Matrix Heatmap — Period level (Day 232–252)")
 
-# ── Tab3 說明面板：Value / Error 定義與用法 ─────────────────────────────
-with st.expander("ℹ️ 什麼是 Value / Error？（點此展開說明）", expanded=False):
-    st.markdown("""
-**你可以用上方的 Day / Period / Unit (Sum / Mean) 搭配下拉選單切換要看的內容。**
+    # ── Tab3 說明面板：Value / Error 定義與用法 ─────────────────────────────
+    with st.expander("ℹ️ 什麼是 Value / Error？（點此展開說明）", expanded=False):
+        st.markdown("""
+        **你可以用上方的 Day / Period / Unit (Sum / Mean) 搭配下拉選單切換要看的內容。**
+        ...
+        """)
 
-### A) Value（量值）
-- **Value: OBS**  
-  顯示真實觀測值（Ground Truth）。  
-  單格 = 該日 × 該時段 × 該 O→D 的 **總量 (Sum)** 或 **每小時平均 (Mean)**。
-- **Value: ARIMA / TensorTS / LSTM**  
-  顯示模型預測值。單位與上面「Unit」一致：
-  - **Sum**：整個時段的合計量  
-  - **Mean**：每小時平均量  
-  （本工具已自動對齊單位：LSTM 原始為每小時平均；其餘模型與 OBS 為時段合計）
+    # --- 控制列：與 Tab1 同步的概念，但獨立 widgets ---
+    colm1, colm2, colm3, colm4 = st.columns([1,1,1,1])
+    with colm1:
+        day_m = st.number_input("Day (232–252)", min_value=232, max_value=252, value=232, step=1, key="t3_day")
+    with colm2:
+        period_m = st.radio("Period", ["morning","afternoon","night"], index=0, horizontal=True, key="t3_period")
+    with colm3:
+        stat_m = st.radio("Agg unit", ["Sum","Mean"], index=0, horizontal=True, key="t3_stat")
+    with colm4:
+        view_mode = st.selectbox(
+            "View",
+            ["Value: OBS","Value: ARIMA","Value: TensorTS","Value: LSTM",
+             "Error (signed): ARIMA − OBS","Error (signed): TensorTS − OBS","Error (signed): LSTM − OBS",
+             "Error (abs): ARIMA − OBS","Error (abs): TensorTS − OBS","Error (abs): LSTM − OBS"],
+            index=0, key="t3_view"
+        )
 
-**色帶**：紅色單色階（Reds）。顏色越深代表量越大。
-
----
-
-### B) Error（誤差）
-所有誤差都以 **OBS** 為基準來比較模型。
-- **Error (signed): MODEL − OBS**  
-  有正負號的誤差：  
-  \\( \\text{Error} = \\text{Model} - \\text{OBS} \\)  
-  紅色（正）＝高估；藍色（負）＝低估；白色 ≈ 0。  
-  **色帶**：發散色盤（RdBu），中間固定在 0。
-- **Error (abs): |MODEL − OBS|**  
-  絕對誤差（不看方向）：  
-  \\( \\lvert \\text{Model} - \\text{OBS} \\rvert \\)  
-  **色帶**：紅色單色階（Reds），越深＝誤差越大。
-
-> **單位一致性**：在計算誤差前，我們會先把模型與 OBS **統一到你選的 Unit（Sum / Mean）** 後再作差，確保公平比較。
-    """)
-
-# --- 控制列：與 Tab1 同步的概念，但獨立 widgets ---
-colm1, colm2, colm3, colm4 = st.columns([1,1,1,1])
-with colm1:
-    day_m = st.number_input("Day (232–252)", min_value=232, max_value=252, value=232, step=1, key="t3_day")
-with colm2:
-    period_m = st.radio("Period", ["morning","afternoon","night"], index=0, horizontal=True, key="t3_period")
-with colm3:
-    stat_m = st.radio("Agg unit", ["Sum","Mean"], index=0, horizontal=True, key="t3_stat")
-with colm4:
-    view_mode = st.selectbox(
-        "View",
-        ["Value: OBS","Value: ARIMA","Value: TensorTS","Value: LSTM",
-         "Error (signed): ARIMA − OBS","Error (signed): TensorTS − OBS","Error (signed): LSTM − OBS"],
-        index=0, key="t3_view"
-    )
-
-    # --- 解析檢視模式 ---
+    # --- 解析檢視模式 & 載入資料（保持你原本的函式呼叫邏輯） ---
     def parse_view(mode: str):
         if mode.startswith("Value"):
             return ("value", mode.split(":")[1].strip().lower())
@@ -663,26 +590,22 @@ with colm4:
 
     mode_kind, model_sel = parse_view(view_mode)
     if model_sel == "tensorts":
-        model_sel = "tensor"  # 容錯
+        model_sel = "tensor"
 
-    # --- 載入 OD 長表（依模式可能要載兩份：model 與 OBS） ---
     df_model = None
     df_obs_m = None
 
     if mode_kind == "value":
-        # 直接載指定來源
         src = "obs" if model_sel == "obs" else model_sel
         df_model = load_period_od(src, day_m, period_m, stat=stat_m)
         if df_model is None:
             st.warning(f"找不到檔案或當日資料：{src} / {period_m}")
     else:
-        # 誤差：同時載入模型與 OBS
         df_model = load_period_od(model_sel, day_m, period_m, stat=stat_m)
-        df_obs_m = load_period_od("obs",     day_m, period_m, stat=stat_m)
+        df_obs_m = load_period_od("obs", day_m, period_m, stat=stat_m)
         if df_model is None or df_obs_m is None:
             st.warning(f"找不到檔案或當日資料：{model_sel} / obs / {period_m}")
         else:
-            # 對齊後計誤差
             key = ["origin_zone_id","dest_zone_id"]
             df_join = pd.merge(df_model, df_obs_m, on=key, how="outer", suffixes=("_m","_o")).fillna(0.0)
             if mode_kind == "err_signed":
@@ -690,83 +613,53 @@ with colm4:
             else:
                 df_model = df_join[key + ["value_m","value_o"]].assign(value=lambda x: (x["value_m"] - x["value_o"]).abs())[key+["value"]]
 
-# --- 畫熱圖 ---
-if df_model is not None and not df_model.empty:
-    mat = od_heatmap_matrix(df_model)
+    # --- 畫熱圖（保持原本的 px.imshow 設定） ---
+    if df_model is not None and not df_model.empty:
+        mat = od_heatmap_matrix(df_model)
+        y_labels = [zid_label(z) for z in mat.index]
+        x_labels = [zid_label(z) for z in mat.columns]
+        text_arr = (np.vectorize(lambda v: f"{v:.1f}")(mat.values)
+                    if stat_m == "Mean" else
+                    np.vectorize(lambda v: f"{int(round(v))}")(mat.values))
 
-    # 軸標籤（ID + 區名）
-    y_labels = [zid_label(z) for z in mat.index]
-    x_labels = [zid_label(z) for z in mat.columns]
-
-    # 安全的 vmin/vmax 與 text
-    vals = mat.values.astype(float)
-    finite = np.isfinite(vals)
-
-    if mode_kind == "err_signed":
-        vmax = float(np.nanmax(np.abs(vals[finite]))) if finite.any() else 1.0
-        zmin, zmax = -vmax, vmax
-        scale = "RdBu"
-        color_label = "Error"
-    else:
-        if finite.any():
-            vmin = float(np.nanmin(vals[finite]))
-            vmax = float(np.nanmax(vals[finite]))
-            if vmax == vmin:
-                vmax = vmin + 1.0
+        if mode_kind == "err_signed":
+            vmax = float(np.nanmax(np.abs(mat.values))) or 1.0
+            fig = px.imshow(
+                mat.values,
+                color_continuous_scale="RdBu",
+                zmin=-vmax, zmax=vmax,
+                labels=dict(x="Destination", y="Origin", color="Error")
+            )
         else:
-            vmin, vmax = 0.0, 1.0
-        zmin, zmax = vmin, vmax
-        scale = "Reds"
-        color_label = "Value" if mode_kind == "value" else "Abs Error"
+            vmin = float(np.nanmin(mat.values)) if np.isfinite(mat.values).all() else 0.0
+            vmax = float(np.nanmax(mat.values)) or 1.0
+            if vmax == vmin: vmax = vmin + 1.0
+            fig = px.imshow(
+                mat.values,
+                color_continuous_scale="Reds",
+                zmin=vmin, zmax=vmax,
+                labels=dict(
+                    x="Destination",
+                    y="Origin",
+                    color=("Value" if mode_kind == "value" else "Abs Error")
+                )
+            )
 
-    # 文字（Sum → 整數；Mean → 1 位小數；NaN 空字串）
-    if stat_m == "Mean":
-        text_arr = np.vectorize(lambda v: f"{v:.1f}" if np.isfinite(v) else "")(vals)
-    else:
-        text_arr = np.vectorize(lambda v: f"{int(round(v))}" if np.isfinite(v) else "")(vals)
+        fig.update_traces(
+            text=text_arr,
+            texttemplate="%{text}",
+            textfont_size=11,
+            hovertemplate="Origin=%{y}<br>Destination=%{x}<br>Value=%{z}<extra></extra>"
+        )
+        fig.update_xaxes(tickmode="array", tickvals=list(range(len(x_labels))), ticktext=x_labels, side="top")
+        fig.update_yaxes(tickmode="array", tickvals=list(range(len(y_labels))), ticktext=y_labels, autorange="reversed")
+        fig.update_layout(margin=dict(l=10, r=10, t=40, b=10), height=640, coloraxis_colorbar=dict(len=0.75))
 
-    fig = px.imshow(
-        vals,
-        color_continuous_scale=scale,
-        zmin=zmin, zmax=zmax,
-        labels=dict(x="Destination", y="Origin", color=color_label)
-    )
-
-    # 把文字塞進去
-    fig.update_traces(
-        text=text_arr,
-        texttemplate="%{text}",
-        textfont_size=11,
-        hovertemplate="Origin=%{y}<br>Destination=%{x}<br>Value=%{z}<extra></extra>"
-    )
-
-    # 軸與外觀
-    fig.update_xaxes(
-        tickmode="array",
-        tickvals=list(range(len(x_labels))),
-        ticktext=x_labels,
-        side="top"
-    )
-    fig.update_yaxes(
-        tickmode="array",
-        tickvals=list(range(len(y_labels))),
-        ticktext=y_labels,
-        autorange="reversed"  # 讓 (0,0) 在左上角
-    )
-    fig.update_layout(
-        margin=dict(l=10, r=10, t=40, b=10),
-        height=640,
-        coloraxis_colorbar=dict(len=0.75)
-    )
-
-    title_map = {
-        "value": "Value",
-        "err_signed": "Signed Error (Model − OBS)",
-        "err_abs": "Absolute Error |Model − OBS|"
-    }
-    model_title = view_mode.split(":")[1].strip() if ":" in view_mode else view_mode
-    st.markdown(
-        f"**{title_map[mode_kind]} — {model_title}**  ·  "
-        f"Day **{day_m}** · Period **{period_m}** · Unit **{stat_m}**"
-    )
-    st.plotly_chart(fig, use_container_width=True)
+        title_map = {
+            "value": "Value",
+            "err_signed": "Signed Error (Model − OBS)",
+            "err_abs": "Absolute Error |Model − OBS|"
+        }
+        model_title = view_mode.split(":")[1].strip() if ":" in view_mode else view_mode
+        st.markdown(f"**{title_map[mode_kind]} — {model_title}**  ·  Day **{day_m}** · Period **{period_m}** · Unit **{stat_m}**")
+        st.plotly_chart(fig, use_container_width=True)
