@@ -136,13 +136,7 @@ def make_map_with_values(title, gj, values, vmin=None, vmax=None,
     folium.GeoJson(gj, name=title, style_function=style_fn,
                    highlight_function=lambda x: highlight, tooltip=tooltip).add_to(m)
 
-def make_map_with_values(title, gj, values, vmin=None, vmax=None,
-                         center=None, zoom=13, show_labels=True, label_digits=0):
-    center = center or GLOBAL_CENTER
-    m = folium.Map(location=list(center), zoom_start=zoom, tiles="CartoDB positron")
-
-    # ...前面計算與 GeoJson add_to(m) 省略...
-
+    # 中心值標籤（四捨五入）
     if show_labels and values is not None and len(values) > 0:
         for zid, val in values.items():
             if zid in ZONE_CENTERS:
@@ -151,11 +145,8 @@ def make_map_with_values(title, gj, values, vmin=None, vmax=None,
                 html = f"""
                 <div style="
                     position: relative;
-                    width: 120px;
-                    height: 20px;
-                    display: flex;
-                    align-items: center;
-                    justify-content: center;
+                    left: 50%; top: 50%;
+                    transform: translate(-50%, -50%);
                     font-size: 12px; font-weight: 700;
                     color: #000;
                     white-space: nowrap;
@@ -169,19 +160,12 @@ def make_map_with_values(title, gj, values, vmin=None, vmax=None,
                 """
                 folium.map.Marker(
                     [lat, lng],
-                    icon=folium.DivIcon(
-                        html=html,
-                        icon_size=(120, 20),
-                        icon_anchor=(60, 10),
-                        class_name="od-label"
-                    ),
-                    z_index_offset=1000
+                    icon=folium.DivIcon(html=html, icon_size=(0, 0), icon_anchor=(0, 0))
                 ).add_to(m)
 
     cmap.caption = title
     cmap.add_to(m)
     return m
-
 
 # ---------- 資料讀取 ----------
 @st.cache_data
@@ -679,5 +663,3 @@ with tab3:
         model_title = view_mode.split(":")[1].strip() if ":" in view_mode else view_mode
         st.markdown(f"**{title_map[mode_kind]} — {model_title}**  ·  Day **{day_m}** · Period **{period_m}** · Unit **{stat_m}**")
         st.plotly_chart(fig, use_container_width=True)
-
-
