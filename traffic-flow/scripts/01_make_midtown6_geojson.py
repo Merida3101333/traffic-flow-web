@@ -5,7 +5,7 @@
 from pathlib import Path
 import geopandas as gpd
 
-DATA_DIR = Path(r"C:\traffic-flow")     # ← 只要改這行成你的專案根目錄
+DATA_DIR = Path(r"../../")     # ← 只要改這行成你的專案根目錄
 SHP_DIR  = DATA_DIR / "data" / "geo"
 OUT_DIR  = SHP_DIR
 
@@ -39,3 +39,4 @@ out_geojson = OUT_DIR / "midtown6.geojson"
 midtown6.to_file(out_geojson, driver="GeoJSON")
 
 print("saved:", out_geojson)
+
