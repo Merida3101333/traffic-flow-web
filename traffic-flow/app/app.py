@@ -136,7 +136,8 @@ def make_map_with_values(title, gj, values, vmin=None, vmax=None,
     folium.GeoJson(gj, name=title, style_function=style_fn,
                    highlight_function=lambda x: highlight, tooltip=tooltip).add_to(m)
 
-    if show_labels and values is not None and len(values) > 0:
+    # 中心值標籤（四捨五入）
+if show_labels and values is not None and len(values) > 0:
     for zid, val in values.items():
         if zid in ZONE_CENTERS:
             lat, lng = ZONE_CENTERS[zid]
