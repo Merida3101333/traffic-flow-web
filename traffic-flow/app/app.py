@@ -136,36 +136,40 @@ def make_map_with_values(title, gj, values, vmin=None, vmax=None,
     folium.GeoJson(gj, name=title, style_function=style_fn,
                    highlight_function=lambda x: highlight, tooltip=tooltip).add_to(m)
 
-    # 中心值標籤（四捨五入）
     if show_labels and values is not None and len(values) > 0:
-        for zid, val in values.items():
-            if zid in ZONE_CENTERS:
-                lat, lng = ZONE_CENTERS[zid]
-                label = format_label_half_up(float(val), digits=label_digits)
-                html = f"""
-                <div style="
-                    position: relative;
-                    left: 50%; top: 50%;
-                    transform: translate(-50%, -50%);
-                    font-size: 12px; font-weight: 700;
-                    color: #000;
-                    white-space: nowrap;
-                    text-shadow:
-                        -1px -1px 1px rgba(255,255,255,0.9),
-                         1px -1px 1px rgba(255,255,255,0.9),
-                        -1px  1px 1px rgba(255,255,255,0.9),
-                         1px  1px 1px rgba(255,255,255,0.9),
-                         0px  0px 2px rgba(0,0,0,0.35);
-                ">{label}</div>
-                """
-                folium.map.Marker(
-                    [lat, lng],
-                    icon=folium.DivIcon(html=html, icon_size=(0, 0), icon_anchor=(0, 0))
-                ).add_to(m)
-
-    cmap.caption = title
-    cmap.add_to(m)
-    return m
+    for zid, val in values.items():
+        if zid in ZONE_CENTERS:
+            lat, lng = ZONE_CENTERS[zid]
+            label = format_label_half_up(float(val), digits=label_digits)
+            html = f"""
+            <div style="
+                position: relative;
+                width: 120px;              /* ✅ 給容器一個寬度 */
+                height: 20px;              /* ✅ 給容器一個高度 */
+                display: flex;             /* ✅ 簡單置中 */
+                align-items: center;
+                justify-content: center;
+                font-size: 12px; font-weight: 700;
+                color: #000;
+                white-space: nowrap;
+                text-shadow:
+                    -1px -1px 1px rgba(255,255,255,0.9),
+                     1px -1px 1px rgba(255,255,255,0.9),
+                    -1px  1px 1px rgba(255,255,255,0.9),
+                     1px  1px 1px rgba(255,255,255,0.9),
+                     0px  0px 2px rgba(0,0,0,0.35);
+            ">{label}</div>
+            """
+            folium.map.Marker(
+                [lat, lng],
+                icon=folium.DivIcon(
+                    html=html,
+                    icon_size=(120, 20),     # ✅ 不要用 (0,0)
+                    icon_anchor=(60, 10),    # ✅ 置中（寬/2, 高/2）
+                    class_name="od-label"
+                ),
+                z_index_offset=1000         # ✅ 確保在 GeoJson 之上
+            ).add_to(m)
 
 # ---------- 資料讀取 ----------
 @st.cache_data
