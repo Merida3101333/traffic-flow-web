@@ -1,32 +1,62 @@
-# OS / 編輯器暫存
-.DS_Store
-Thumbs.db
-*.log
-.idea/
-.vscode/
-__pycache__/
-*.pyc
+########################
+# Python 相關
+########################
 
-# Python/環境
+# Byte-compiled / cache
+__pycache__/
+*.py[cod]
+*$py.class
+
+# 虛擬環境
 .venv/
 venv/
-.env
-.env.* 
+env/
 
+# Jupyter / 其他
+.ipynb_checkpoints/
+
+
+########################
 # R 相關
+########################
+
 .RData
 .Rhistory
-*.Rproj.user
+.Rproj.user/
 
-# 不必要或大型檔案
-*.zip
-*.7z
-*.tar
-*.tar.gz
 
-# 專案資料：避免把原始/巨大資料推上去（只保留部署需要的 processed/mapping）
+########################
+# 資料檔案（依需要調整）
+########################
+
+# 原始大檔（若要放到 GitHub，可以把這幾行註解掉）
 data/raw/
+data/raw/model_outputs/
+
+# 中間輸出 / 報表（若未來想版控某些 output，可以再細分）
 output/
 
-# Streamlit 機密（改放雲端 Secrets 介面）
-.streamlit/secrets.toml
+
+########################
+# 系統 / 編輯器
+########################
+
+# macOS
+.DS_Store
+
+# Windows
+Thumbs.db
+Desktop.ini
+
+# VSCode / IDE
+.vscode/
+.idea/
+*.iml
+
+
+########################
+# 其他
+########################
+
+# tree 輸出檔（如不需要可以忽略）
+tree.txt
