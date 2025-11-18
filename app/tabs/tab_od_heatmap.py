@@ -18,7 +18,7 @@ def render():
         st.markdown("""
         **你可以用上方的 Day / Period / Unit (Sum / Mean) 搭配下拉選單切換要看的內容。**
         - Value: 顯示各 OD pair 的預測值 / 真實值
-        - Error (signed): Model − OBS（帶正負號，紅=高估、藍=低估）
+        - Error (signed): Model − OBS（帶正負號，紅=低估、藍=高估）
         - Error (abs): |Model − OBS|（誤差大小，不看方向）
 
         這個熱圖可以幫你：
